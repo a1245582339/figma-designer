@@ -3,11 +3,20 @@
   "version": "0.1.0",
   "description": "OpenClaw Figma integration plugin — read designs, export images, manage components and styles",
   "type": "module",
+  "scripts": {
+    "build:plugin": "esbuild figma-plugin/src/plugin.ts --bundle --outfile=figma-plugin/plugin.js --target=es2015 --format=iife --platform=browser"
+  },
   "dependencies": {
     "@sinclair/typebox": "0.34.48",
     "ws": "^8.18.0"
   },
   "openclaw": {
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.123.0",
+    "esbuild": "^0.27.3"
   }
 }
