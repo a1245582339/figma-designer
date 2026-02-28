@@ -7,6 +7,10 @@
       "personalAccessToken": {
         "type": "string",
         "description": "Figma Personal Access Token (with file_content:read scope)"
+      },
+      "bridgePort": {
+        "type": "number",
+        "description": "WebSocket port for the Figma plugin bridge (default: 3055)"
       }
     },
     "required": ["personalAccessToken"]
@@ -16,6 +20,10 @@
       "label": "Figma Personal Access Token",
       "sensitive": true,
       "placeholder": "figd_xxxxxxxxxxxx"
+    },
+    "bridgePort": {
+      "label": "Figma Bridge Port",
+      "placeholder": "3055"
     }
   }
 }

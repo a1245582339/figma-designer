@@ -1,0 +1,12 @@
+{
+  "name": "OpenClaw Figma Bridge",
+  "id": "openclaw-figma-bridge",
+  "api": "1.0.0",
+  "main": "plugin.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["*"],
+    "reasoning": "Connects to OpenClaw server to receive design commands from AI agents."
+  }
+}

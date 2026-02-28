@@ -1,0 +1,39 @@
+<script>
+let ws;
+const SERVER = "ws://127.0.0.1:3055";
+
+function connect() {
+  ws = new WebSocket(SERVER);
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ hello: "from-plugin-ui" }));
+    updateStatus("Connected to " + SERVER);
+  };
+  ws.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(ev.data);
+      parent.postMessage({ pluginMessage: msg }, "*");
+    } catch (e) {
+      console.error("Bad WS message", e);
+    }
+  };
+  ws.onclose = () => {
+    updateStatus("Disconnected. Reconnecting...");
+    setTimeout(connect, 2000);
+  };
+  ws.onerror = () => {
+    updateStatus("Connection error. Retrying...");
+  };
+}
+
+onmessage = (ev) => {
+  if (ev.data && ev.data.pluginMessage && ws && ws.readyState === 1) {
+    ws.send(JSON.stringify(ev.data.pluginMessage));
+  }
+};
+
+function updateStatus(text) {
+  parent.postMessage({ pluginMessage: { _status: text } }, "*");
+}
+
+connect();
+</script>
