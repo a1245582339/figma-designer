@@ -1,0 +1,21 @@
+{
+  "id": "figma-designer",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "personalAccessToken": {
+        "type": "string",
+        "description": "Figma Personal Access Token (with file_content:read scope)"
+      }
+    },
+    "required": ["personalAccessToken"]
+  },
+  "uiHints": {
+    "personalAccessToken": {
+      "label": "Figma Personal Access Token",
+      "sensitive": true,
+      "placeholder": "figd_xxxxxxxxxxxx"
+    }
+  }
+}

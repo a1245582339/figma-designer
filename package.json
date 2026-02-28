@@ -1,0 +1,12 @@
+{
+  "name": "@openclaw/figma-designer",
+  "version": "0.1.0",
+  "description": "OpenClaw Figma integration plugin — read designs, export images, manage components and styles",
+  "type": "module",
+  "dependencies": {
+    "@sinclair/typebox": "0.34.48"
+  },
+  "openclaw": {
+    "extensions": ["./index.ts"]
+  }
+}
