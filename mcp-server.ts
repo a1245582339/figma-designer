@@ -59,6 +59,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
+async function shutdown() {
+  console.error("[figma-designer] Shutting down…");
+  await bridge.stop();
+  await server.close();
+  process.exit(0);
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+
 async function main() {
   await bridge.start();
   console.error(`[figma-designer] MCP server starting (bridge port ${bridgePort})`);

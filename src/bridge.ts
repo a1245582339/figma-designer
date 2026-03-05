@@ -50,10 +50,25 @@ export class FigmaBridge {
     });
   }
 
-  stop() {
-    this.wss?.close();
-    this.wss = null;
-    this.plugin = null;
+  stop(): Promise<void> {
+    return new Promise((resolve) => {
+      for (const [id, req] of this.pending) {
+        req.reject(new Error("Bridge shutting down"));
+        clearTimeout(req.timer);
+      }
+      this.pending.clear();
+
+      if (this.wss) {
+        for (const client of this.wss.clients) {
+          client.terminate();
+        }
+        this.wss.close(() => resolve());
+      } else {
+        resolve();
+      }
+      this.wss = null;
+      this.plugin = null;
+    });
   }
 
   get isConnected(): boolean {

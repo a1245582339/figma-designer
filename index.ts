@@ -5,6 +5,17 @@ import { FigmaBridge } from "./src/bridge.js";
 
 let bridge: FigmaBridge | null = null;
 
+function cleanupBridge() {
+  if (bridge) {
+    bridge.stop();
+    bridge = null;
+  }
+}
+
+process.on("SIGINT", cleanupBridge);
+process.on("SIGTERM", cleanupBridge);
+process.on("exit", cleanupBridge);
+
 function getPluginConfig(api: OpenClawPluginApi): Record<string, unknown> {
   try {
     return (api.config?.plugins?.entries?.["figma-designer"]?.config as Record<string, unknown>) ?? {};
