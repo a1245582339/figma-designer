@@ -1,6 +1,6 @@
 {
   "name": "figma-designer-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server that gives AI agents full read & write access to Figma — 50+ tools for creating frames, placing components, styling, auto layout, and more.",
   "type": "module",
   "license": "MIT",
@@ -16,10 +16,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/nicepkg/openclaw",
+    "url": "https://github.com/a1245582339/figma-designer",
     "directory": "extensions/figma-designer"
   },
-  "homepage": "https://github.com/nicepkg/openclaw/tree/master/extensions/figma-designer#mcp-mode-standalone",
+  "homepage": "https://github.com/a1245582339/figma-designer",
   "bin": {
     "figma-designer-mcp": "./dist/mcp-server.js"
   },
@@ -29,7 +29,9 @@
     "figma-plugin/ui.html",
     "figma-plugin/plugin.js",
     "figma-plugin/assets/",
+    "docs/",
     "README.md",
+    "README.zh-CN.md",
     "LICENSE"
   ],
   "engines": {
@@ -37,7 +39,7 @@
   },
   "scripts": {
     "build:plugin": "esbuild figma-plugin/src/plugin.ts --bundle --outfile=figma-plugin/plugin.js --target=es2015 --format=iife --platform=browser",
-    "build:mcp": "esbuild mcp-server.ts --bundle --outfile=dist/mcp-server.js --format=esm --platform=node --target=node18 --external:@modelcontextprotocol/sdk --external:ws",
+    "build:mcp": "esbuild mcp-server.ts --bundle --outfile=dist/mcp-server.js --format=esm --platform=node --target=node18 --external:@modelcontextprotocol/sdk --external:ws --banner:js='#!/usr/bin/env node'",
     "build": "npm run build:plugin && npm run build:mcp",
     "prepublishOnly": "npm run build"
   },

@@ -1,81 +1,183 @@
-# @openclaw/figma-designer
+# figma-designer-mcp
 
-An OpenClaw extension that gives AI agents full read **and write** access to Figma.
+[![npm](https://img.shields.io/npm/v/figma-designer-mcp)](https://www.npmjs.com/package/figma-designer-mcp)
+[![license](https://img.shields.io/npm/l/figma-designer-mcp)](./LICENSE)
+
+MCP server that gives AI agents full read **and write** access to Figma — 50+ tools for creating frames, placing components, styling, auto layout, and more.
+
+Works with any MCP-compatible client (Claude Desktop, Cursor, Continue, etc.) and also as an [OpenClaw](#openclaw-mode) extension.
+
+English | [中文](./README.zh-CN.md)
 
 - **Read** — powered by the Figma REST API (no plugin required).
-- **Write** — powered by a lightweight Figma plugin that connects to OpenClaw via WebSocket and executes Figma Plugin API operations in real time.
+- **Write** — powered by a lightweight Figma plugin that connects via WebSocket and executes Plugin API operations in real time.
 
-## Architecture
+## vs. Figma Official MCP
 
+[Figma's official MCP server](https://help.figma.com/hc/en-us/articles/32132100833559-Guide-to-the-Figma-MCP-server) is designed for the **Design → Code** direction: it helps developers read existing designs and generate code. `figma-designer-mcp` is built for the **opposite direction — Code/AI → Design**: it lets AI agents **create and modify** designs directly on the Figma canvas.
+
+| | **figma-designer-mcp** | **Figma Official MCP** |
+|---|---|---|
+| **Direction** | AI → Design (create & edit designs) | Design → Code (read designs, generate code) |
+| **Write tools** | 44+ write tools — create frames, shapes, text, place components, set styles, auto layout, etc. | Virtually none — `generate_figma_design` captures live UI but cannot create or edit design elements |
+| **Read tools** | 6 REST API tools — read nodes, screenshot, list components/styles, comments | ~13 tools — design context, variables, metadata, screenshots, Code Connect |
+| **Component manipulation** | Search, instantiate, configure variant properties, duplicate, reparent | Read-only — extract component info for code generation |
+| **Page & node management** | Create/switch pages, rename/delete/duplicate/group/resize/rotate nodes | No page or node manipulation |
+| **Styling control** | Fill, stroke, corner radius, opacity, blend mode, effects (shadow/blur) | No direct styling — returns style data for code output |
+| **Auto layout** | Full auto layout configuration (direction, spacing, padding, alignment, wrap) | No layout editing |
+| **Client support** | All MCP clients equally — no feature restrictions | Some features limited to specific clients (e.g. `generate_figma_design` requires Claude Code or Codex) |
+| **Hosting** | Self-hosted, open source (MIT) | Remote (Figma-hosted) or desktop app |
+| **Pricing** | Free | Requires paid Figma plan for desktop server |
+
+**In short:** Figma's official MCP helps you turn designs into code. `figma-designer-mcp` helps AI turn ideas into designs. They are complementary — you can use both together in the same project.
+
+## Best Practices
+
+Check out the **[Best Practices Guide](./docs/best-practices.md)** for proven strategies to get the most out of this tool:
+
+- **Use a component library file** (e.g. Ant Design) as your workspace — search & reuse 3–5x faster than drawing from scratch
+- **Create a template frame** for consistent page layout across multi-page designs
+- **Duplicate instead of redraw** — for tables, lists, and grids, create one item then copy it
+- **Configure variant properties** instead of manually editing component internals
+- **Use the icon library** — search and instantiate, don't draw icons by hand
+
+These techniques compound to reduce tool calls by **60–80%**, saving both time and tokens.
+
+## Quick Start
+
+```bash
+FIGMA_TOKEN=figd_xxxxxxxxxxxx npx figma-designer-mcp
 ```
-AI Agent
-  │  calls figma_create_frame, figma_add_text, figma_set_fill …
-  ▼
-OpenClaw Gateway
-  │  figma-designer extension
-  │  ├── REST API client  →  Figma API (read, screenshot, components, styles, comments)
-  │  └── WebSocket server (FigmaBridge, default port 3055)
-  ▼
-Figma Client (Desktop or Browser)
-  └── "OpenClaw Figma Bridge" plugin
-      └── Executes Figma Plugin API calls (create nodes, set styles, auto layout …)
+
+Or install globally:
+
+```bash
+npm install -g figma-designer-mcp
+FIGMA_TOKEN=figd_xxxxxxxxxxxx figma-designer-mcp
 ```
 
-## Prerequisites
+### Environment Variables
 
-| Requirement | Details |
-|---|---|
-| **OpenClaw** | Gateway running with the `figma-designer` plugin enabled |
-| **Figma Personal Access Token** | Generate at https://www.figma.com/developers/api#access-tokens — needs `file_content:read` scope |
-| **Figma Desktop or Browser** | Required for write operations (the plugin runs inside Figma) |
-| **Network** | The machine running Figma must be able to reach the OpenClaw server on the bridge port (default `3055`) |
+| Variable | Required | Description |
+|---|---|---|
+| `FIGMA_TOKEN` | Yes | Figma Personal Access Token ([generate here](https://www.figma.com/developers/api#access-tokens)) |
+| `FIGMA_BRIDGE_PORT` | No | WebSocket bridge port (default: `3055`) |
 
-## Setup
+### Claude Desktop
 
-### 1. Configure the extension in `openclaw.json`
+Add to `claude_desktop_config.json`:
 
-```jsonc
+```json
 {
-  "plugins": {
-    "entries": {
-      "figma-designer": {
-        "enabled": true,
-        "config": {
-          "personalAccessToken": "figd_xxxxxxxxxxxx",
-          "bridgePort": 3055          // optional, default 3055
-        }
+  "mcpServers": {
+    "figma": {
+      "command": "npx",
+      "args": ["figma-designer-mcp"],
+      "env": {
+        "FIGMA_TOKEN": "figd_xxxxxxxxxxxx"
       }
     }
   }
 }
 ```
 
-### 2. Build the Figma plugin
+### Cursor
 
-The plugin source lives in `figma-plugin/`. You need to build it before importing into Figma:
+Add to `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "figma": {
+      "command": "npx",
+      "args": ["figma-designer-mcp"],
+      "env": {
+        "FIGMA_TOKEN": "figd_xxxxxxxxxxxx"
+      }
+    }
+  }
+}
+```
+
+### Other MCP Clients
+
+Any client that supports the MCP stdio transport:
+
+```json
+{
+  "command": "npx",
+  "args": ["figma-designer-mcp"],
+  "env": { "FIGMA_TOKEN": "figd_xxxxxxxxxxxx" }
+}
+```
+
+## Figma Plugin Setup (for Write Tools)
+
+Read tools work out of the box. Write tools (creating nodes, styling, auto layout, etc.) require a companion Figma plugin that acts as the execution bridge.
+
+### 1. Build the plugin
 
 ```bash
-npm install
+cd /path/to/figma-designer-mcp   # or: npx figma-designer-mcp --help to find install location
 npm run build:plugin
 ```
 
 This compiles `figma-plugin/src/plugin.ts` → `figma-plugin/plugin.js` using esbuild.
 
-### 3. Install the Figma plugin (for write operations)
+### 2. Import into Figma
 
 1. Open **Figma** (desktop app or browser).
 2. Go to **Plugins → Development → Import plugin from manifest…**
-3. Select `figma-plugin/manifest.json` from this directory.
+3. Select `figma-plugin/manifest.json` from the package directory.
 4. Open the Figma file you want to design in.
 5. Run the plugin: **Plugins → Development → OpenClaw Figma Bridge**.
 
-The plugin opens a configuration UI where you can enter the OpenClaw server address and port, then click **Connect**. Configuration is persisted via Figma's `clientStorage`. The plugin auto-reconnects on disconnection.
+The plugin opens a UI where you enter the MCP server address and port, then click **Connect**. Configuration is persisted via Figma's `clientStorage`. The plugin auto-reconnects on disconnection.
 
-> **Tip:** Duplicate a design system community file (e.g. [Ant Design Open Source](https://www.figma.com/community/file/831698976089873405)), open the duplicate, and run the plugin. The agent can then use `figma_search_components` to find components and `figma_create_instance` to place them on new pages.
+> **Tip:** Duplicate a design system community file (e.g. [Ant Design Open Source](https://www.figma.com/community/file/831698976089873405)), open the duplicate, and run the plugin. The agent can then use `figma_search_components` to find components and `figma_create_instance` to place them.
 
-### 4. Restart the OpenClaw gateway
+## Architecture
 
-After updating `openclaw.json`, restart the gateway so the extension loads and the WebSocket bridge starts listening.
+```
+AI Client (Claude, Cursor, etc.)
+  │  MCP stdio transport
+  ▼
+figma-designer-mcp
+  ├── REST API client  →  Figma API (read, screenshot, components, styles, comments)
+  └── WebSocket server (FigmaBridge, default port 3055)
+                              ▼
+               Figma Client (Desktop or Browser)
+                 └── "OpenClaw Figma Bridge" plugin
+                     └── Executes Plugin API calls (create nodes, set styles, auto layout …)
+```
+
+### Read path
+
+Agent calls `figma_read` / `figma_screenshot` / etc. → MCP server makes an HTTP request to `https://api.figma.com/v1/...` using `FIGMA_TOKEN` → returns structured data.
+
+### Write path
+
+1. MCP server starts a WebSocket server on port `FIGMA_BRIDGE_PORT` (default `3055`).
+2. The Figma plugin connects to this WebSocket server.
+3. When an agent calls a write tool (e.g. `figma_create_frame`), the server sends a JSON message:
+   ```json
+   { "id": "req_1", "action": "create_frame", "args": { "name": "Login Page", "width": 1440, "height": 900 } }
+   ```
+4. The plugin executes `figma.createFrame()` via the Plugin API and replies:
+   ```json
+   { "replyTo": "req_1", "result": { "ok": true, "nodeId": "123:456", "type": "FRAME", "name": "Login Page" } }
+   ```
+5. The server resolves the promise and returns the result to the agent.
+
+Each request has a 30-second timeout. If the plugin disconnects mid-operation, pending requests are rejected immediately.
+
+### Auto-positioning
+
+All creation tools automatically place new top-level elements to the right of existing content when:
+1. No `parentId` is specified (placed at page root level)
+2. No explicit `x` or `y` is provided
+
+This prevents overlapping. Elements placed inside a Frame (with `parentId`) are not affected.
 
 ## Available Tools
 
@@ -192,65 +294,6 @@ After updating `openclaw.json`, restart the gateway so the extension loads and t
 | `figma_set_properties` | Batch-set multiple properties. Params: `nodeId`, `props`. |
 | `figma_bridge_status` | Check if the Figma plugin is connected. |
 
-## File Structure
-
-```
-extensions/figma-designer/
-├── index.ts                  # OpenClaw plugin entry
-├── mcp-server.ts             # MCP server entry (standalone mode)
-├── openclaw.plugin.json      # Plugin manifest & config schema
-├── package.json
-├── LICENSE
-├── src/
-│   ├── tool-defs.ts          # Shared tool definitions (single source of truth)
-│   ├── client.ts             # Figma REST API client (read operations)
-│   ├── tools.ts              # OpenClaw adapter — read tools
-│   ├── write-tools.ts        # OpenClaw adapter — write tools
-│   └── bridge.ts             # WebSocket server — accepts Figma plugin connections
-├── dist/                     # Build output (run `npm run build:mcp` to generate)
-│   └── mcp-server.js         # Compiled MCP server
-├── figma-plugin/             # Figma plugin (import into Figma for write operations)
-│   ├── manifest.json
-│   ├── ui.html               # Plugin UI — server config & WebSocket client
-│   ├── src/
-│   │   └── plugin.ts         # TypeScript source (action dispatcher)
-│   ├── plugin.js             # Compiled output (run `npm run build:plugin` to generate)
-│   ├── tsconfig.json
-│   └── assets/
-│       └── logo.jpeg
-└── .gitignore
-```
-
-## How It Works
-
-### Read path
-
-Agent calls `figma_read` / `figma_screenshot` / etc. → the extension makes an HTTP request to `https://api.figma.com/v1/...` using the configured Personal Access Token → returns structured data to the agent.
-
-### Write path
-
-1. The extension starts a WebSocket server on the configured `bridgePort` (default `3055`).
-2. The Figma plugin (running inside Figma) connects to this WebSocket server.
-3. When an agent calls a write tool (e.g. `figma_create_frame`), the extension sends a JSON message over WebSocket:
-   ```json
-   { "id": "req_1", "action": "create_frame", "args": { "name": "Login Page", "width": 1440, "height": 900 } }
-   ```
-4. The Figma plugin receives this, executes `figma.createFrame()` via the Figma Plugin API, and replies:
-   ```json
-   { "replyTo": "req_1", "result": { "ok": true, "nodeId": "123:456", "type": "FRAME", "name": "Login Page" } }
-   ```
-5. The extension resolves the promise and returns the result to the agent.
-
-Each request has a 30-second timeout. If the plugin disconnects mid-operation, pending requests are rejected immediately.
-
-### Auto-positioning
-
-All creation tools automatically place new top-level elements to the right of existing content when:
-1. No `parentId` is specified (placed at page root level)
-2. No explicit `x` or `y` is provided
-
-This prevents overlapping. Elements placed inside a Frame (with `parentId`) are not affected.
-
 ## Development
 
 ### Building
@@ -272,12 +315,41 @@ After modifying `plugin.ts`, rebuild and restart the Figma plugin to pick up cha
 2. **Bridge-based tools (write):** Add a new action handler in `figma-plugin/src/plugin.ts`. Use the `bt()` helper in `tool-defs.ts` for the tool definition.
 3. **REST API tools (read):** Add a client method in `src/client.ts`. Write a custom execute function in `tool-defs.ts`.
 
+### File Structure
+
+```
+figma-designer-mcp/
+├── mcp-server.ts             # MCP server entry point
+├── index.ts                  # OpenClaw plugin entry (alternative mode)
+├── openclaw.plugin.json      # OpenClaw plugin manifest
+├── package.json
+├── LICENSE
+├── src/
+│   ├── tool-defs.ts          # Shared tool definitions (single source of truth)
+│   ├── client.ts             # Figma REST API client (read operations)
+│   ├── tools.ts              # OpenClaw adapter — read tools
+│   ├── write-tools.ts        # OpenClaw adapter — write tools
+│   └── bridge.ts             # WebSocket server — accepts Figma plugin connections
+├── dist/                     # Build output
+│   └── mcp-server.js         # Compiled MCP server (generated by npm run build:mcp)
+├── figma-plugin/             # Figma plugin (import into Figma for write operations)
+│   ├── manifest.json
+│   ├── ui.html               # Plugin UI — server config & WebSocket client
+│   ├── src/
+│   │   └── plugin.ts         # TypeScript source (action dispatcher)
+│   ├── plugin.js             # Compiled output (generated by npm run build:plugin)
+│   ├── tsconfig.json
+│   └── assets/
+│       └── logo.jpeg
+└── .gitignore
+```
+
 ## Troubleshooting
 
 ### "Figma plugin not connected"
 
 - Make sure the Figma plugin is running (Plugins → Development → OpenClaw Figma Bridge).
-- Check that the WebSocket address in the plugin UI matches your OpenClaw server IP and port.
+- Check that the WebSocket address in the plugin UI matches the server IP and port.
 - Verify no firewall is blocking the bridge port.
 
 ### Plugin connects but operations fail
@@ -294,68 +366,39 @@ After modifying `plugin.ts`, rebuild and restart the Figma plugin to pick up cha
 - The font must be available in Figma. Default is `Inter` which is always available.
 - For custom fonts, ensure they are installed or available in your Figma account.
 
-## MCP Mode (Standalone)
+## OpenClaw Mode
 
-In addition to running as an OpenClaw extension, this plugin can run as a standalone **MCP (Model Context Protocol) server**, making all 50+ Figma tools available to any MCP-compatible AI client (Cursor, Claude Desktop, Continue, etc.).
+This package also works as an OpenClaw extension. To use it in OpenClaw instead of as a standalone MCP server:
 
-### Build
+### Prerequisites
 
-```bash
-npm run build:mcp
-```
-
-This compiles `mcp-server.ts` into `dist/mcp-server.js`.
+| Requirement | Details |
+|---|---|
+| **OpenClaw** | Gateway running with the `figma-designer` plugin enabled |
+| **Figma Personal Access Token** | Generate at https://www.figma.com/developers/api#access-tokens |
+| **Figma Desktop or Browser** | Required for write operations |
 
 ### Configuration
 
-MCP mode reads configuration from environment variables:
+Add to `openclaw.json`:
 
-| Variable | Required | Description |
-|---|---|---|
-| `FIGMA_TOKEN` | Yes | Figma Personal Access Token |
-| `FIGMA_BRIDGE_PORT` | No | WebSocket bridge port (default: `3055`) |
-
-### Claude Desktop
-
-Add to `claude_desktop_config.json`:
-
-```json
+```jsonc
 {
-  "mcpServers": {
-    "figma-designer": {
-      "command": "node",
-      "args": ["/path/to/figma-designer/dist/mcp-server.js"],
-      "env": {
-        "FIGMA_TOKEN": "figd_xxxxxxxxxxxx"
+  "plugins": {
+    "entries": {
+      "figma-designer": {
+        "enabled": true,
+        "config": {
+          "personalAccessToken": "figd_xxxxxxxxxxxx",
+          "bridgePort": 3055          // optional, default 3055
+        }
       }
     }
   }
 }
 ```
 
-### Cursor
-
-Add to `.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "figma-designer": {
-      "command": "node",
-      "args": ["/path/to/figma-designer/dist/mcp-server.js"],
-      "env": {
-        "FIGMA_TOKEN": "figd_xxxxxxxxxxxx"
-      }
-    }
-  }
-}
-```
-
-### Other MCP Clients
-
-Any client that supports the MCP stdio transport can use this server. Just point it to `dist/mcp-server.js` with the `FIGMA_TOKEN` environment variable set.
-
-> **Note:** Write tools still require the Figma plugin to be running and connected via WebSocket. Read tools (figma_read, figma_screenshot, etc.) work without the plugin.
+Restart the OpenClaw gateway after updating configuration.
 
 ## License
 
