@@ -9,6 +9,8 @@
 
 [English](./README.md) | 中文
 
+![figma-designer-mcp 演示](https://github.com/a1245582339/picx-images-hosting/raw/master/微信图片_20260305181946_10965_2541.5xb6kbx4kc.png)
+
 - **读取** — 基于 Figma REST API（无需安装插件）。
 - **写入** — 通过轻量 Figma 插件经 WebSocket 实时执行 Plugin API 操作。
 
