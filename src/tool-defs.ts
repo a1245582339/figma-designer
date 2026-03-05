@@ -124,10 +124,16 @@ export const readToolDefs: ToolDef[] = [
       scale: Type.Optional(Type.Number({ description: "Export scale (default: 2)" })),
     }),
     async execute(
-      params: { fileKey: string; nodeIds: string[]; format?: string; scale?: number },
+      params: { fileKey: string; nodeIds: string | string[]; format?: string; scale?: number },
       { client },
     ) {
-      const resp = await client.getImages(params.fileKey, params.nodeIds, {
+      const ids = Array.isArray(params.nodeIds)
+        ? params.nodeIds
+        : typeof params.nodeIds === "string"
+          ? params.nodeIds.split(",").map((s: string) => s.trim())
+          : [];
+      if (ids.length === 0) throw new Error("nodeIds is required (e.g. [\"1:2\"])");
+      const resp = await client.getImages(params.fileKey, ids, {
         format: (params.format ?? "png") as any,
         scale: params.scale ?? 2,
       });

@@ -35,14 +35,14 @@ export class FigmaClient {
     return this.request<FigmaFileResponse>(`/files/${fileKey}${qs ? `?${qs}` : ""}`);
   }
 
-  async getFileNodes(fileKey: string, nodeIds: string[]) {
-    const ids = nodeIds.join(",");
+  async getFileNodes(fileKey: string, nodeIds: string | string[]) {
+    const ids = Array.isArray(nodeIds) ? nodeIds.join(",") : String(nodeIds);
     return this.request<FigmaFileNodesResponse>(`/files/${fileKey}/nodes?ids=${encodeURIComponent(ids)}`);
   }
 
-  async getImages(fileKey: string, nodeIds: string[], opts?: { format?: "png" | "jpg" | "svg" | "pdf"; scale?: number }) {
+  async getImages(fileKey: string, nodeIds: string | string[], opts?: { format?: "png" | "jpg" | "svg" | "pdf"; scale?: number }) {
     const params = new URLSearchParams();
-    params.set("ids", nodeIds.join(","));
+    params.set("ids", Array.isArray(nodeIds) ? nodeIds.join(",") : String(nodeIds));
     if (opts?.format) params.set("format", opts.format);
     if (opts?.scale != null) params.set("scale", String(opts.scale));
     return this.request<FigmaImagesResponse>(`/images/${fileKey}?${params.toString()}`);
