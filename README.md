@@ -8,7 +8,7 @@ An OpenClaw extension that gives AI agents full read **and write** access to Fig
 ## Architecture
 
 ```
-Agent (e.g. tanglang)
+AI Agent
   │  calls figma_create_frame, figma_add_text, figma_set_fill …
   ▼
 OpenClaw Gateway
@@ -50,9 +50,18 @@ Figma Client (Desktop or Browser)
 }
 ```
 
-### 2. Install the Figma plugin (for write operations)
+### 2. Build the Figma plugin
 
-The plugin source lives in `figma-plugin/` inside this extension directory.
+The plugin source lives in `figma-plugin/`. You need to build it before importing into Figma:
+
+```bash
+npm install
+npm run build:plugin
+```
+
+This compiles `figma-plugin/src/plugin.ts` → `figma-plugin/plugin.js` using esbuild.
+
+### 3. Install the Figma plugin (for write operations)
 
 1. Open **Figma** (desktop app or browser).
 2. Go to **Plugins → Development → Import plugin from manifest…**
@@ -60,14 +69,11 @@ The plugin source lives in `figma-plugin/` inside this extension directory.
 4. Open the Figma file you want to design in.
 5. Run the plugin: **Plugins → Development → OpenClaw Figma Bridge**.
 
-The plugin runs with a hidden UI. It will automatically connect to `ws://127.0.0.1:3055` and keep reconnecting if the connection drops.
+The plugin opens a configuration UI where you can enter the OpenClaw server address and port, then click **Connect**. Configuration is persisted via Figma's `clientStorage`. The plugin auto-reconnects on disconnection.
 
-> **Remote server?** If OpenClaw runs on a different machine, edit the `SERVER` constant in `figma-plugin/ui.html`:
-> ```js
-> const SERVER = "ws://YOUR_SERVER_IP:3055";
-> ```
+> **Tip:** Duplicate a design system community file (e.g. [Ant Design Open Source](https://www.figma.com/community/file/831698976089873405)), open the duplicate, and run the plugin. The agent can then use `figma_search_components` to find components and `figma_create_instance` to place them on new pages.
 
-### 3. Restart the OpenClaw gateway
+### 4. Restart the OpenClaw gateway
 
 After updating `openclaw.json`, restart the gateway so the extension loads and the WebSocket bridge starts listening.
 
@@ -82,6 +88,7 @@ After updating `openclaw.json`, restart the gateway so the extension loads and t
 | `figma_components` | List all components in a file (name, description, key, node ID). |
 | `figma_styles` | List all styles in a file (colors, text styles, effects, grids). |
 | `figma_comment` | Post a comment on a file, optionally attached to a specific node. |
+| `figma_get_comments` | Read all comments on a file. Returns text, author, timestamp. |
 
 ### Write Tools (WebSocket bridge — plugin required)
 
@@ -102,7 +109,8 @@ After updating `openclaw.json`, restart the gateway so the extension loads and t
 
 | Tool | Description |
 |---|---|
-| `figma_find_nodes` | Find nodes by type or name substring. Params: `type`, `nameContains`, `within`. |
+| `figma_find_nodes` | Find nodes in the current page by type or name substring. Params: `type`, `nameContains`, `within`. |
+| `figma_find_nodes_all_pages` | Search nodes across **all pages** by type and/or name. Returns node ID, type, name, and page. Params: `type`, `nameContains`, `nameEquals`, `limit`. |
 | `figma_select_nodes` | Select nodes by ID. Params: `nodeIds`. |
 | `figma_get_selection` | Get the current selection. |
 
@@ -110,8 +118,10 @@ After updating `openclaw.json`, restart the gateway so the extension loads and t
 
 | Tool | Description |
 |---|---|
+| `figma_list_pages` | List all pages in the file with IDs and names, and show the current active page. |
 | `figma_create_page` | Create a new page. Params: `name`, `makeCurrent`. |
 | `figma_set_current_page` | Switch to a page. Params: `pageId`. |
+| `figma_get_page_bounds` | Get the bounding box of all content on the current page, plus a suggested position for placing new elements without overlap. |
 
 #### Node Management
 
@@ -125,6 +135,7 @@ After updating `openclaw.json`, restart the gateway so the extension loads and t
 | `figma_set_position` | Set absolute position. Params: `nodeId`, `x`, `y`. |
 | `figma_group_nodes` | Group nodes. Params: `nodeIds`, `name`. |
 | `figma_ungroup` | Ungroup. Params: `groupId`. |
+| `figma_reparent_node` | Move a node into a different container (frame, group, page). Params: `nodeId`, `newParentId`, `index`. |
 
 #### Styling
 
@@ -142,7 +153,7 @@ After updating `openclaw.json`, restart the gateway so the extension loads and t
 
 | Tool | Description |
 |---|---|
-| `figma_set_auto_layout` | Configure Auto Layout on a frame. Params: `nodeId`, `layoutMode`, `itemSpacing`, `padding*`, `primaryAxisAlignItems`, `counterAxisAlignItems`, etc. |
+| `figma_set_auto_layout` | Configure Auto Layout on a frame. Params: `nodeId`, `layoutMode`, `itemSpacing`, `padding*`, `primaryAxisAlignItems`, `counterAxisAlignItems`, `layoutWrap`, etc. |
 | `figma_set_constraints` | Set constraints. Params: `nodeId`, `horizontal`, `vertical`. |
 | `figma_layout_grid_add` | Add a layout grid. Params: `nodeId`, `pattern`, `count`, `gutterSize`, `sectionSize`, `hex`, `opacity`. |
 | `figma_layout_grid_clear` | Remove all layout grids. Params: `nodeId`. |
@@ -160,9 +171,18 @@ After updating `openclaw.json`, restart the gateway so the extension loads and t
 | Tool | Description |
 |---|---|
 | `figma_create_component` | Create a reusable component. Params: `name`, `fromNodeIds`. |
-| `figma_create_instance` | Instantiate a component. Params: `componentId`, `x`, `y`. |
+| `figma_create_instance` | Instantiate a component. Params: `componentId`, `x`, `y`, `parentId`. |
 | `figma_detach_instance` | Detach an instance to a regular frame. Params: `nodeId`. |
 | `figma_boolean_op` | Boolean operation (UNION, SUBTRACT, INTERSECT, EXCLUDE). Params: `op`, `nodeIds`, `name`. |
+
+#### Component Library
+
+| Tool | Description |
+|---|---|
+| `figma_list_local_components` | List all components in the file. Params: `pageFilter` (optional, filter by page name), `limit` (default 200). Returns component name, ID, variant properties, and page location. |
+| `figma_search_components` | Search components by name, component set name, or description. Params: `query`, `limit` (default 50). |
+| `figma_get_component_properties` | Read all configurable properties (variants, booleans, text overrides) of a component instance. Returns property names, types, current values, and available options. Params: `nodeId`. |
+| `figma_set_component_properties` | Set variant properties on a component instance (e.g. Table rows/columns, Button type/size). Supports fuzzy matching on property names. Params: `nodeId`, `properties`. |
 
 #### Export & Utilities
 
@@ -176,18 +196,28 @@ After updating `openclaw.json`, restart the gateway so the extension loads and t
 
 ```
 extensions/figma-designer/
-├── index.ts                  # Plugin entry — registers read tools, starts bridge, registers write tools
+├── index.ts                  # OpenClaw plugin entry
+├── mcp-server.ts             # MCP server entry (standalone mode)
 ├── openclaw.plugin.json      # Plugin manifest & config schema
 ├── package.json
+├── LICENSE
 ├── src/
+│   ├── tool-defs.ts          # Shared tool definitions (single source of truth)
 │   ├── client.ts             # Figma REST API client (read operations)
-│   ├── tools.ts              # Read tool registrations (figma_read, figma_screenshot, etc.)
-│   ├── bridge.ts             # WebSocket server — accepts Figma plugin connections
-│   └── write-tools.ts        # Write tool registrations (35+ tools)
+│   ├── tools.ts              # OpenClaw adapter — read tools
+│   ├── write-tools.ts        # OpenClaw adapter — write tools
+│   └── bridge.ts             # WebSocket server — accepts Figma plugin connections
+├── dist/                     # Build output (run `npm run build:mcp` to generate)
+│   └── mcp-server.js         # Compiled MCP server
 ├── figma-plugin/             # Figma plugin (import into Figma for write operations)
 │   ├── manifest.json
-│   ├── plugin.js             # Action dispatcher — executes Figma Plugin API calls
-│   └── ui.html               # Hidden UI — WebSocket client connecting to OpenClaw
+│   ├── ui.html               # Plugin UI — server config & WebSocket client
+│   ├── src/
+│   │   └── plugin.ts         # TypeScript source (action dispatcher)
+│   ├── plugin.js             # Compiled output (run `npm run build:plugin` to generate)
+│   ├── tsconfig.json
+│   └── assets/
+│       └── logo.jpeg
 └── .gitignore
 ```
 
@@ -213,12 +243,41 @@ Agent calls `figma_read` / `figma_screenshot` / etc. → the extension makes an 
 
 Each request has a 30-second timeout. If the plugin disconnects mid-operation, pending requests are rejected immediately.
 
+### Auto-positioning
+
+All creation tools automatically place new top-level elements to the right of existing content when:
+1. No `parentId` is specified (placed at page root level)
+2. No explicit `x` or `y` is provided
+
+This prevents overlapping. Elements placed inside a Frame (with `parentId`) are not affected.
+
+## Development
+
+### Building
+
+```bash
+npm run build           # Build everything (plugin + MCP server)
+npm run build:plugin    # Build Figma plugin only
+npm run build:mcp       # Build MCP server only
+```
+
+- `build:plugin` compiles `figma-plugin/src/plugin.ts` → `figma-plugin/plugin.js` (IIFE, ES2015, browser)
+- `build:mcp` compiles `mcp-server.ts` → `dist/mcp-server.js` (ESM, Node 18+)
+
+After modifying `plugin.ts`, rebuild and restart the Figma plugin to pick up changes.
+
+### Adding new tools
+
+1. Add the tool definition in `src/tool-defs.ts` (single source of truth for both OpenClaw and MCP modes).
+2. **Bridge-based tools (write):** Add a new action handler in `figma-plugin/src/plugin.ts`. Use the `bt()` helper in `tool-defs.ts` for the tool definition.
+3. **REST API tools (read):** Add a client method in `src/client.ts`. Write a custom execute function in `tool-defs.ts`.
+
 ## Troubleshooting
 
 ### "Figma plugin not connected"
 
 - Make sure the Figma plugin is running (Plugins → Development → OpenClaw Figma Bridge).
-- Check that the WebSocket address in `figma-plugin/ui.html` matches your OpenClaw server IP and port.
+- Check that the WebSocket address in the plugin UI matches your OpenClaw server IP and port.
 - Verify no firewall is blocking the bridge port.
 
 ### Plugin connects but operations fail
@@ -235,6 +294,69 @@ Each request has a 30-second timeout. If the plugin disconnects mid-operation, p
 - The font must be available in Figma. Default is `Inter` which is always available.
 - For custom fonts, ensure they are installed or available in your Figma account.
 
+## MCP Mode (Standalone)
+
+In addition to running as an OpenClaw extension, this plugin can run as a standalone **MCP (Model Context Protocol) server**, making all 50+ Figma tools available to any MCP-compatible AI client (Cursor, Claude Desktop, Continue, etc.).
+
+### Build
+
+```bash
+npm run build:mcp
+```
+
+This compiles `mcp-server.ts` into `dist/mcp-server.js`.
+
+### Configuration
+
+MCP mode reads configuration from environment variables:
+
+| Variable | Required | Description |
+|---|---|---|
+| `FIGMA_TOKEN` | Yes | Figma Personal Access Token |
+| `FIGMA_BRIDGE_PORT` | No | WebSocket bridge port (default: `3055`) |
+
+### Claude Desktop
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "figma-designer": {
+      "command": "node",
+      "args": ["/path/to/figma-designer/dist/mcp-server.js"],
+      "env": {
+        "FIGMA_TOKEN": "figd_xxxxxxxxxxxx"
+      }
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "figma-designer": {
+      "command": "node",
+      "args": ["/path/to/figma-designer/dist/mcp-server.js"],
+      "env": {
+        "FIGMA_TOKEN": "figd_xxxxxxxxxxxx"
+      }
+    }
+  }
+}
+```
+
+### Other MCP Clients
+
+Any client that supports the MCP stdio transport can use this server. Just point it to `dist/mcp-server.js` with the `FIGMA_TOKEN` environment variable set.
+
+> **Note:** Write tools still require the Figma plugin to be running and connected via WebSocket. Read tools (figma_read, figma_screenshot, etc.) work without the plugin.
+
 ## License
 
-MIT
+MIT — see [LICENSE](./LICENSE).

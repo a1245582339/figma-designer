@@ -1,13 +1,48 @@
 {
-  "name": "@openclaw/figma-designer",
+  "name": "figma-designer-mcp",
   "version": "0.1.0",
-  "description": "OpenClaw Figma integration plugin — read designs, export images, manage components and styles",
+  "description": "MCP server that gives AI agents full read & write access to Figma — 50+ tools for creating frames, placing components, styling, auto layout, and more.",
   "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "figma",
+    "figma-plugin",
+    "ai-agent",
+    "design-automation",
+    "model-context-protocol",
+    "openclaw"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nicepkg/openclaw",
+    "directory": "extensions/figma-designer"
+  },
+  "homepage": "https://github.com/nicepkg/openclaw/tree/master/extensions/figma-designer#mcp-mode-standalone",
+  "bin": {
+    "figma-designer-mcp": "./dist/mcp-server.js"
+  },
+  "files": [
+    "dist/",
+    "figma-plugin/manifest.json",
+    "figma-plugin/ui.html",
+    "figma-plugin/plugin.js",
+    "figma-plugin/assets/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "build:plugin": "esbuild figma-plugin/src/plugin.ts --bundle --outfile=figma-plugin/plugin.js --target=es2015 --format=iife --platform=browser"
+    "build:plugin": "esbuild figma-plugin/src/plugin.ts --bundle --outfile=figma-plugin/plugin.js --target=es2015 --format=iife --platform=browser",
+    "build:mcp": "esbuild mcp-server.ts --bundle --outfile=dist/mcp-server.js --format=esm --platform=node --target=node18 --external:@modelcontextprotocol/sdk --external:ws",
+    "build": "npm run build:plugin && npm run build:mcp",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@sinclair/typebox": "0.34.48",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "ws": "^8.18.0"
   },
   "openclaw": {
@@ -17,6 +52,7 @@
   },
   "devDependencies": {
     "@figma/plugin-typings": "^1.123.0",
+    "@sinclair/typebox": "0.34.48",
     "esbuild": "^0.27.3"
   }
 }

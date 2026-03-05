@@ -1,2 +1,4 @@
 node_modules/
 figma-plugin/plugin.js
+dist/
+._*

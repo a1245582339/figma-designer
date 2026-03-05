@@ -33,7 +33,9 @@ export class FigmaBridge {
             const msg = JSON.parse(String(raw));
             if (msg.hello === "from-plugin-ui") return;
             this.handlePluginMessage(msg);
-          } catch {}
+          } catch (err) {
+            console.warn("[figma-designer] Failed to parse plugin message:", err);
+          }
         });
         ws.on("close", () => {
           console.log("[figma-designer] Figma plugin disconnected");

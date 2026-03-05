@@ -1,39 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Inter, system-ui, -apple-system, sans-serif;
+    font-size: 12px;
+    color: var(--figma-color-text, #333);
+    background: var(--figma-color-bg, #fff);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: 100vh;
+  }
+  label { font-weight: 600; display: block; margin-bottom: 4px; }
+  .row { display: flex; gap: 8px; align-items: flex-end; }
+  input {
+    flex: 1;
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid var(--figma-color-border, #d4d4d4);
+    border-radius: 6px;
+    font-size: 12px;
+    background: var(--figma-color-bg-secondary, #f5f5f5);
+    color: inherit;
+    outline: none;
+  }
+  input:focus { border-color: var(--figma-color-border-brand, #0d99ff); }
+  button {
+    height: 32px;
+    padding: 0 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-primary {
+    background: var(--figma-color-bg-brand, #0d99ff);
+    color: #fff;
+  }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-danger {
+    background: var(--figma-color-bg-danger, #f24822);
+    color: #fff;
+  }
+  .btn-danger:hover { opacity: 0.9; }
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--figma-color-bg-secondary, #f5f5f5);
+    font-size: 11px;
+    min-height: 36px;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot-red { background: #f24822; }
+  .dot-yellow { background: #ffb020; }
+  .dot-green { background: #14ae5c; }
+  .status-text { flex: 1; }
+  .help {
+    font-size: 10px;
+    color: var(--figma-color-text-secondary, #999);
+    line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+
+<div>
+  <label>Server Address</label>
+  <div class="row">
+    <input id="host" type="text" placeholder="e.g. 10.0.0.1 or 127.0.0.1" />
+    <span style="line-height:32px">:</span>
+    <input id="port" type="text" placeholder="3055" style="flex:0 0 64px; text-align:center" />
+  </div>
+</div>
+
+<div class="row">
+  <button id="btnConnect" class="btn-primary" onclick="doConnect()">Connect</button>
+  <button id="btnDisconnect" class="btn-danger" onclick="doDisconnect()" style="display:none">Disconnect</button>
+</div>
+
+<div class="status-bar">
+  <div id="dot" class="dot dot-red"></div>
+  <div id="statusText" class="status-text">Not connected</div>
+</div>
+
+<div class="help">
+  Enter the IP and port of your OpenClaw server's Figma bridge.<br>
+  Default port is <b>3055</b>. The bridge starts automatically with the OpenClaw gateway.
+</div>
+
 <script>
-let ws;
-const SERVER = "ws://127.0.0.1:3055";
+var ws = null;
+var reconnectTimer = null;
+var autoReconnect = false;
+
+var hostInput = document.getElementById('host');
+var portInput = document.getElementById('port');
+var btnConnect = document.getElementById('btnConnect');
+var btnDisconnect = document.getElementById('btnDisconnect');
+var dot = document.getElementById('dot');
+var statusText = document.getElementById('statusText');
+
+// Figma plugin UI runs in a data: URL sandbox — localStorage is unavailable.
+// Persist config via figma.clientStorage through postMessage relay instead.
+var configLoaded = false;
+
+parent.postMessage({ pluginMessage: { _loadConfig: true } }, '*');
+
+function getServerUrl() {
+  var h = hostInput.value.trim() || '127.0.0.1';
+  var p = portInput.value.trim() || '3055';
+  return 'ws://' + h + ':' + p;
+}
+
+function saveConfig() {
+  parent.postMessage({ pluginMessage: {
+    _saveConfig: { host: hostInput.value.trim(), port: portInput.value.trim() }
+  } }, '*');
+}
+
+function setStatus(state, text) {
+  statusText.textContent = text;
+  dot.className = 'dot ' + (state === 'connected' ? 'dot-green' : state === 'connecting' ? 'dot-yellow' : 'dot-red');
+  btnConnect.style.display = state === 'connected' ? 'none' : '';
+  btnDisconnect.style.display = state === 'connected' ? '' : 'none';
+  hostInput.disabled = state === 'connected';
+  portInput.disabled = state === 'connected';
+}
+
+function doConnect() {
+  if (ws) { ws.close(); ws = null; }
+  clearTimeout(reconnectTimer);
+  autoReconnect = true;
+  saveConfig();
+  connect();
+}
+
+function doDisconnect() {
+  autoReconnect = false;
+  clearTimeout(reconnectTimer);
+  if (ws) { ws.close(); ws = null; }
+  setStatus('disconnected', 'Disconnected');
+}
 
 function connect() {
-  ws = new WebSocket(SERVER);
-  ws.onopen = () => {
-    ws.send(JSON.stringify({ hello: "from-plugin-ui" }));
-    updateStatus("Connected to " + SERVER);
+  var url = getServerUrl();
+  setStatus('connecting', 'Connecting to ' + url + ' ...');
+  try {
+    ws = new WebSocket(url);
+  } catch (e) {
+    setStatus('disconnected', 'Invalid address');
+    return;
+  }
+  ws.onopen = function() {
+    ws.send(JSON.stringify({ hello: 'from-plugin-ui' }));
+    setStatus('connected', 'Connected to ' + url);
   };
-  ws.onmessage = (ev) => {
+  ws.onmessage = function(ev) {
     try {
-      const msg = JSON.parse(ev.data);
-      parent.postMessage({ pluginMessage: msg }, "*");
-    } catch (e) {
-      console.error("Bad WS message", e);
+      var msg = JSON.parse(ev.data);
+      parent.postMessage({ pluginMessage: msg }, '*');
+    } catch (e) {}
+  };
+  ws.onclose = function() {
+    ws = null;
+    if (autoReconnect) {
+      setStatus('disconnected', 'Disconnected. Reconnecting in 3s...');
+      reconnectTimer = setTimeout(connect, 3000);
+    } else {
+      setStatus('disconnected', 'Disconnected');
     }
   };
-  ws.onclose = () => {
-    updateStatus("Disconnected. Reconnecting...");
-    setTimeout(connect, 2000);
-  };
-  ws.onerror = () => {
-    updateStatus("Connection error. Retrying...");
+  ws.onerror = function() {
+    setStatus('disconnected', 'Connection failed');
   };
 }
 
-onmessage = (ev) => {
-  if (ev.data && ev.data.pluginMessage && ws && ws.readyState === 1) {
-    ws.send(JSON.stringify(ev.data.pluginMessage));
+onmessage = function(ev) {
+  var msg = ev.data && ev.data.pluginMessage;
+  if (!msg) return;
+
+  if (msg._config) {
+    if (!configLoaded) {
+      configLoaded = true;
+      if (msg._config.host) hostInput.value = msg._config.host;
+      if (msg._config.port) portInput.value = msg._config.port;
+    }
+    return;
+  }
+
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify(msg));
   }
 };
-
-function updateStatus(text) {
-  parent.postMessage({ pluginMessage: { _status: text } }, "*");
-}
-
-connect();
 </script>
+
+</body>
+</html>

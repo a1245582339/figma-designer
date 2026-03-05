@@ -1,12 +1,27 @@
-figma.showUI(__html__, { visible: false });
+figma.showUI(__html__, { visible: true, width: 320, height: 240, themeColors: true });
+
+const CONFIG_KEY = "openclaw_bridge_config";
 
 figma.ui.onmessage = async (msg: {
   _status?: string;
+  _loadConfig?: boolean;
+  _saveConfig?: { host: string; port: string };
   id?: string;
   action?: string;
   args?: Record<string, any>;
 }) => {
   if (msg._status) return;
+
+  if (msg._loadConfig) {
+    const saved = await figma.clientStorage.getAsync(CONFIG_KEY);
+    figma.ui.postMessage({ _config: saved || {} });
+    return;
+  }
+  if (msg._saveConfig) {
+    await figma.clientStorage.setAsync(CONFIG_KEY, msg._saveConfig);
+    return;
+  }
+
   const { id, action, args } = msg;
   try {
     const result = await handleAction(action!, args || {});
@@ -59,6 +74,38 @@ function cloneArray<T>(arr: ReadonlyArray<T>): T[] {
   const out: T[] = [];
   for (let i = 0; i < arr.length; i++) out.push(arr[i]);
   return out;
+}
+
+const AUTO_POSITION_GAP = 100;
+
+function computePageBounds(): { minX: number; minY: number; maxX: number; maxY: number; empty: boolean } {
+  const children = page().children;
+  if (children.length === 0) return { minX: 0, minY: 0, maxX: 0, maxY: 0, empty: true };
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const child of children) {
+    if (!("width" in child)) continue;
+    const c = child as SceneNode & { width: number; height: number };
+    if (c.x < minX) minX = c.x;
+    if (c.y < minY) minY = c.y;
+    const right = c.x + c.width;
+    const bottom = c.y + c.height;
+    if (right > maxX) maxX = right;
+    if (bottom > maxY) maxY = bottom;
+  }
+  if (minX === Infinity) return { minX: 0, minY: 0, maxX: 0, maxY: 0, empty: true };
+  return { minX, minY, maxX, maxY, empty: false };
+}
+
+function resolvePosition(input: any, parentId: string | undefined): { x: number; y: number } {
+  if (input.x !== undefined || input.y !== undefined) {
+    return { x: input.x ?? 0, y: input.y ?? 0 };
+  }
+  if (parentId) {
+    return { x: 0, y: 0 };
+  }
+  const bounds = computePageBounds();
+  if (bounds.empty) return { x: 0, y: 0 };
+  return { x: bounds.maxX + AUTO_POSITION_GAP, y: bounds.minY };
 }
 
 // ── Action dispatcher ──
@@ -115,6 +162,15 @@ async function handleAction(action: string, input: Record<string, any>): Promise
     case "set_plugin_data":     return setPluginData(input);
     case "get_plugin_data":     return getPluginData(input);
     case "set_properties":      return setProperties(input);
+    case "reparent_node":       return reparentNode(input);
+    case "get_component_properties": return getComponentProperties(input);
+    case "set_component_properties": return setComponentProperties(input);
+
+    case "list_local_components": return listLocalComponents(input);
+    case "search_components":     return searchComponents(input);
+    case "list_pages":            return listPages();
+    case "find_nodes_all_pages":  return findNodesAllPages(input);
+    case "get_page_bounds":       return getPageBounds();
 
     default:
       throw new Error("Unknown action: " + action);
@@ -128,76 +184,92 @@ function getParent(parentId?: string): BaseNode & ChildrenMixin {
   return page();
 }
 
-function createFrame({ name = "Frame", width = 800, height = 600, x = 0, y = 0, parentId }: any) {
+function createFrame(input: any) {
+  const { name = "Frame", width = 800, height = 600, parentId } = input;
+  const pos = resolvePosition(input, parentId);
   const f = figma.createFrame();
-  f.name = name; f.resize(width, height); f.x = x; f.y = y;
+  f.name = name; f.resize(width, height); f.x = pos.x; f.y = pos.y;
   getParent(parentId).appendChild(f);
-  return { nodeId: f.id, type: f.type, name: f.name, width, height };
+  return { nodeId: f.id, type: f.type, name: f.name, width, height, x: pos.x, y: pos.y };
 }
 
-function createRectangle({ width, height, x = 0, y = 0, cornerRadius, hex, parentId }: any) {
+function createRectangle(input: any) {
+  const { width, height, cornerRadius, hex, parentId } = input;
+  const pos = resolvePosition(input, parentId);
   const r = figma.createRectangle();
-  r.resize(width, height); r.x = x; r.y = y;
+  r.resize(width, height); r.x = pos.x; r.y = pos.y;
   if (typeof cornerRadius === "number") r.cornerRadius = cornerRadius;
   if (hex) r.fills = [{ type: "SOLID", color: hexToRGB(hex) }];
   getParent(parentId).appendChild(r);
-  return { nodeId: r.id, type: r.type };
+  return { nodeId: r.id, type: r.type, x: pos.x, y: pos.y };
 }
 
-function createEllipse({ width, height, x = 0, y = 0, hex, parentId }: any) {
+function createEllipse(input: any) {
+  const { width, height, hex, parentId } = input;
+  const pos = resolvePosition(input, parentId);
   const e = figma.createEllipse();
-  e.resize(width, height); e.x = x; e.y = y;
+  e.resize(width, height); e.x = pos.x; e.y = pos.y;
   if (hex) e.fills = [{ type: "SOLID", color: hexToRGB(hex) }];
   getParent(parentId).appendChild(e);
-  return { nodeId: e.id, type: e.type };
+  return { nodeId: e.id, type: e.type, x: pos.x, y: pos.y };
 }
 
-function createLine({ x = 0, y = 0, length = 100, rotation = 0, strokeHex = "#111827", strokeWeight = 1, parentId }: any) {
+function createLine(input: any) {
+  const { length = 100, rotation = 0, strokeHex = "#111827", strokeWeight = 1, parentId } = input;
+  const pos = resolvePosition(input, parentId);
   const l = figma.createLine();
-  l.x = x; l.y = y; l.rotation = rotation;
+  l.x = pos.x; l.y = pos.y; l.rotation = rotation;
   l.strokes = [{ type: "SOLID", color: hexToRGB(strokeHex) }];
   l.strokeWeight = strokeWeight;
   l.resize(length, 0);
   getParent(parentId).appendChild(l);
-  return { nodeId: l.id, type: l.type };
+  return { nodeId: l.id, type: l.type, x: pos.x, y: pos.y };
 }
 
-function createPolygon({ sides, width, height, x = 0, y = 0, hex, parentId }: any) {
+function createPolygon(input: any) {
+  const { sides, width, height, hex, parentId } = input;
+  const pos = resolvePosition(input, parentId);
   const p = figma.createPolygon();
-  p.pointCount = sides; p.resize(width, height); p.x = x; p.y = y;
+  p.pointCount = sides; p.resize(width, height); p.x = pos.x; p.y = pos.y;
   if (hex) p.fills = [{ type: "SOLID", color: hexToRGB(hex) }];
   getParent(parentId).appendChild(p);
-  return { nodeId: p.id, type: p.type };
+  return { nodeId: p.id, type: p.type, x: pos.x, y: pos.y };
 }
 
-function createStar({ points, width, height, x = 0, y = 0, hex, parentId }: any) {
+function createStar(input: any) {
+  const { points, width, height, hex, parentId } = input;
+  const pos = resolvePosition(input, parentId);
   const s = figma.createStar();
-  s.pointCount = points; s.resize(width, height); s.x = x; s.y = y;
+  s.pointCount = points; s.resize(width, height); s.x = pos.x; s.y = pos.y;
   if (hex) s.fills = [{ type: "SOLID", color: hexToRGB(hex) }];
   getParent(parentId).appendChild(s);
-  return { nodeId: s.id, type: s.type };
+  return { nodeId: s.id, type: s.type, x: pos.x, y: pos.y };
 }
 
-async function addText({ text, x = 0, y = 0, fontFamily = "Inter", fontStyle = "Regular", fontSize = 32, hex, parentId }: any) {
+async function addText(input: any) {
+  const { text, fontFamily = "Inter", fontStyle = "Regular", fontSize = 32, hex, parentId } = input;
+  const pos = resolvePosition(input, parentId);
   await figma.loadFontAsync({ family: fontFamily, style: fontStyle });
   const t = figma.createText();
   t.characters = text;
   t.fontName = { family: fontFamily, style: fontStyle };
   if (fontSize) t.fontSize = fontSize;
   if (hex) t.fills = [{ type: "SOLID", color: hexToRGB(hex) }];
-  t.x = x; t.y = y;
+  t.x = pos.x; t.y = pos.y;
   getParent(parentId).appendChild(t);
-  return { nodeId: t.id, type: t.type, text: t.characters };
+  return { nodeId: t.id, type: t.type, text: t.characters, x: pos.x, y: pos.y };
 }
 
-function placeImageBase64({ width, height, x = 0, y = 0, base64, parentId }: any) {
+function placeImageBase64(input: any) {
+  const { width, height, base64, parentId } = input;
+  const pos = resolvePosition(input, parentId);
   const bytes = base64ToUint8Array(base64);
   const image = figma.createImage(bytes);
   const r = figma.createRectangle();
-  r.resize(width, height); r.x = x; r.y = y;
+  r.resize(width, height); r.x = pos.x; r.y = pos.y;
   r.fills = [{ type: "IMAGE", imageHash: image.hash, scaleMode: "FILL" }];
   getParent(parentId).appendChild(r);
-  return { nodeId: r.id, type: r.type };
+  return { nodeId: r.id, type: r.type, x: pos.x, y: pos.y };
 }
 
 // ── Selection / find / pages ──
@@ -461,13 +533,15 @@ function createComponent({ name = "Component", fromNodeIds }: any) {
   return nodeInfo(c);
 }
 
-function createInstance({ componentId, x = 0, y = 0 }: any) {
+function createInstance(input: any) {
+  const { componentId, parentId } = input;
   const c = getNode(componentId) as ComponentNode;
   if (c.type !== "COMPONENT") throw new Error("Not a component");
   const inst = c.createInstance();
-  inst.x = x; inst.y = y;
-  page().appendChild(inst);
-  return nodeInfo(inst);
+  const pos = resolvePosition(input, parentId);
+  inst.x = pos.x; inst.y = pos.y;
+  getParent(parentId).appendChild(inst);
+  return { ...nodeInfo(inst), x: pos.x, y: pos.y };
 }
 
 function detachInstance({ nodeId }: any) {
@@ -532,4 +606,259 @@ function setProperties({ nodeId, props }: any) {
     }
   }
   return nodeInfo(n);
+}
+
+function getComponentProperties({ nodeId }: any) {
+  const n = getNode(nodeId);
+  if (n.type !== "INSTANCE" && n.type !== "COMPONENT") {
+    throw new Error("Node is not a component instance or component");
+  }
+
+  const result: Record<string, any> = {};
+
+  if (n.type === "INSTANCE") {
+    const inst = n as InstanceNode;
+    const props = inst.componentProperties;
+    for (const key of Object.keys(props)) {
+      const prop = props[key];
+      result[key] = {
+        type: prop.type,
+        value: prop.value,
+      };
+      if (prop.type === "VARIANT") {
+        const mainComp = inst.mainComponent;
+        if (mainComp) {
+          const parent = mainComp.parent;
+          if (parent && parent.type === "COMPONENT_SET") {
+            const propDefs = (parent as ComponentSetNode).componentPropertyDefinitions;
+            if (propDefs[key] && (propDefs[key] as any).variantOptions) {
+              result[key].options = (propDefs[key] as any).variantOptions;
+            }
+          }
+        }
+      }
+    }
+  } else {
+    const comp = n as ComponentNode;
+    const propDefs = (comp as any).componentPropertyDefinitions;
+    if (propDefs) {
+      for (const key of Object.keys(propDefs)) {
+        const def = propDefs[key];
+        result[key] = {
+          type: def.type,
+          defaultValue: def.defaultValue,
+        };
+        if (def.variantOptions) result[key].options = def.variantOptions;
+      }
+    }
+  }
+
+  return { nodeId: n.id, type: n.type, name: n.name, properties: result };
+}
+
+function setComponentProperties({ nodeId, properties }: any) {
+  const n = getNode(nodeId);
+  if (n.type !== "INSTANCE") throw new Error("Node is not a component instance");
+  const inst = n as InstanceNode;
+  const props = inst.componentProperties;
+  const updated: Record<string, any> = {};
+
+  for (const [key, value] of Object.entries(properties as Record<string, any>)) {
+    if (!(key in props)) {
+      const fuzzyMatch = Object.keys(props).find(
+        (k) => k.toLowerCase() === key.toLowerCase() || k.split("#")[0] === key
+      );
+      if (fuzzyMatch) {
+        inst.setProperties({ [fuzzyMatch]: value });
+        updated[fuzzyMatch] = value;
+        continue;
+      }
+      continue;
+    }
+    inst.setProperties({ [key]: value });
+    updated[key] = value;
+  }
+
+  return { nodeId: n.id, name: n.name, updated };
+}
+
+function reparentNode({ nodeId, newParentId, index }: any) {
+  const n = getNode(nodeId);
+  const parent = newParentId ? getNode(newParentId) as BaseNode & ChildrenMixin : page();
+  if (!("appendChild" in parent)) throw new Error("Target parent cannot contain children");
+  if (typeof index === "number") {
+    (parent as ChildrenMixin).insertChild(index, n);
+  } else {
+    (parent as ChildrenMixin).appendChild(n);
+  }
+  return { nodeId: n.id, newParent: { nodeId: parent.id, type: parent.type, name: "name" in parent ? parent.name : undefined } };
+}
+
+// ── Component library helpers ──
+
+function componentSummary(c: ComponentNode) {
+  const info: Record<string, any> = {
+    nodeId: c.id,
+    name: c.name,
+    description: c.description || undefined,
+    width: c.width,
+    height: c.height,
+  };
+
+  const pageName = findPageName(c);
+  if (pageName) info.page = pageName;
+
+  if (c.parent && c.parent.type === "COMPONENT_SET") {
+    info.componentSetName = c.parent.name;
+    info.componentSetId = c.parent.id;
+  }
+
+  const propDefs = (c as any).componentPropertyDefinitions;
+  if (propDefs && Object.keys(propDefs).length > 0) {
+    info.properties = {};
+    for (const key of Object.keys(propDefs)) {
+      const def = propDefs[key];
+      info.properties[key] = {
+        type: def.type,
+        defaultValue: def.defaultValue,
+      };
+      if (def.variantOptions) info.properties[key].options = def.variantOptions;
+    }
+  }
+
+  return info;
+}
+
+function findPageName(node: BaseNode): string | undefined {
+  let cur: BaseNode | null = node;
+  while (cur) {
+    if (cur.type === "PAGE") return cur.name;
+    cur = cur.parent;
+  }
+  return undefined;
+}
+
+function listLocalComponents({ pageFilter, limit = 200 }: any) {
+  const results: ReturnType<typeof componentSummary>[] = [];
+  const pages = figma.root.children;
+
+  for (const pg of pages) {
+    if (pageFilter && pg.name.toLowerCase() !== String(pageFilter).toLowerCase()) continue;
+
+    const walk = (node: BaseNode) => {
+      if (results.length >= limit) return;
+      if (node.type === "COMPONENT") {
+        results.push(componentSummary(node as ComponentNode));
+      }
+      if ("children" in node) {
+        for (const child of (node as ChildrenMixin).children) walk(child);
+      }
+    };
+    walk(pg);
+  }
+
+  return { count: results.length, components: results };
+}
+
+function searchComponents({ query, limit = 50 }: any) {
+  const q = String(query || "").toLowerCase();
+  if (!q) throw new Error("query is required");
+
+  const results: ReturnType<typeof componentSummary>[] = [];
+  const pages = figma.root.children;
+
+  for (const pg of pages) {
+    const walk = (node: BaseNode) => {
+      if (results.length >= limit) return;
+      if (node.type === "COMPONENT") {
+        const c = node as ComponentNode;
+        const nameMatch = c.name.toLowerCase().includes(q);
+        const setMatch = c.parent && c.parent.type === "COMPONENT_SET" && c.parent.name.toLowerCase().includes(q);
+        const descMatch = c.description && c.description.toLowerCase().includes(q);
+        if (nameMatch || setMatch || descMatch) {
+          results.push(componentSummary(c));
+        }
+      }
+      if ("children" in node) {
+        for (const child of (node as ChildrenMixin).children) walk(child);
+      }
+    };
+    walk(pg);
+  }
+
+  return { query, count: results.length, components: results };
+}
+
+function listPages() {
+  return {
+    pages: figma.root.children.map((p: PageNode) => ({
+      pageId: p.id,
+      name: p.name,
+    })),
+    currentPage: { pageId: figma.currentPage.id, name: figma.currentPage.name },
+  };
+}
+
+function getPageBounds() {
+  const bounds = computePageBounds();
+  const children = page().children;
+  const topLevel = children.map((c: SceneNode) => ({
+    nodeId: c.id,
+    name: c.name,
+    type: c.type,
+    x: c.x,
+    y: c.y,
+    width: "width" in c ? (c as any).width : 0,
+    height: "height" in c ? (c as any).height : 0,
+  }));
+  const suggested = bounds.empty
+    ? { x: 0, y: 0 }
+    : { x: bounds.maxX + AUTO_POSITION_GAP, y: bounds.minY };
+  return {
+    bounds,
+    suggestedNextPosition: suggested,
+    topLevelNodeCount: children.length,
+    topLevelNodes: topLevel,
+  };
+}
+
+function findNodesAllPages({ type, nameContains, nameEquals, limit = 500 }: any) {
+  const results: Array<Record<string, any>> = [];
+  const pages = figma.root.children;
+
+  for (const pg of pages) {
+    if (results.length >= limit) break;
+    const walk = (node: BaseNode) => {
+      if (results.length >= limit) return;
+      if (node.type === "PAGE") {
+        if ("children" in node) {
+          for (const child of (node as ChildrenMixin).children) walk(child);
+        }
+        return;
+      }
+      const n = node as SceneNode;
+      const typeOk = type ? n.type === type : true;
+      let nameOk = true;
+      if (nameEquals) {
+        nameOk = n.name === nameEquals;
+      } else if (nameContains) {
+        nameOk = n.name.toLowerCase().includes(nameContains.toLowerCase());
+      }
+      if (typeOk && nameOk) {
+        results.push({
+          nodeId: n.id,
+          type: n.type,
+          name: n.name,
+          page: pg.name,
+          pageId: pg.id,
+        });
+      }
+      if ("children" in node && results.length < limit) {
+        for (const child of (node as ChildrenMixin).children) walk(child);
+      }
+    };
+    walk(pg);
+  }
+
+  return { count: results.length, nodes: results };
 }
