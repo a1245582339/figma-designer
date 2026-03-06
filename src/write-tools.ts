@@ -8,8 +8,12 @@ function json(data: unknown) {
   };
 }
 
-export function registerFigmaWriteTools(api: OpenClawPluginApi, bridge: FigmaBridge) {
-  for (const tool of writeToolDefs) {
+export function registerFigmaWriteTools(api: OpenClawPluginApi, bridge: FigmaBridge, filter?: Set<string>) {
+  const tools = filter
+    ? writeToolDefs.filter((t) => filter.has(t.name))
+    : writeToolDefs;
+
+  for (const tool of tools) {
     api.registerTool(
       {
         name: tool.name,

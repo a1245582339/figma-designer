@@ -18,8 +18,12 @@ function getClient(api: OpenClawPluginApi): FigmaClient {
   return new FigmaClient({ personalAccessToken: token });
 }
 
-export function registerFigmaTools(api: OpenClawPluginApi) {
-  for (const tool of readToolDefs) {
+export function registerFigmaTools(api: OpenClawPluginApi, filter?: Set<string>) {
+  const tools = filter
+    ? readToolDefs.filter((t) => filter.has(t.name))
+    : readToolDefs;
+
+  for (const tool of tools) {
     api.registerTool(
       {
         name: tool.name,
