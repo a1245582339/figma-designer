@@ -1,6 +1,6 @@
 {
   "name": "figma-designer-mcp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "MCP server that gives AI agents full read & write access to Figma — 50+ tools for creating frames, placing components, styling, auto layout, and more.",
   "type": "module",
   "license": "MIT",

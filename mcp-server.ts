@@ -24,7 +24,7 @@ const bridge = new FigmaBridge(bridgePort);
 const ctx: ToolContext = { client, bridge };
 
 const mcpServer = new McpServer(
-  { name: "figma-designer", version: "0.3.0" },
+  { name: "figma-designer", version: "0.3.1" },
   { capabilities: { tools: { listChanged: true } } },
 );
 
