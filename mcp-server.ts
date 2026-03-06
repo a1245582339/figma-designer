@@ -5,10 +5,14 @@ import {
   CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
+import { createRequire } from "module";
 import { FigmaClient } from "./src/client.js";
 import { FigmaBridge } from "./src/bridge.js";
 import { type ToolContext } from "./src/tool-defs.js";
 import { ToolRegistry } from "./src/tool-registry.js";
+
+const require = createRequire(import.meta.url);
+const { version } = require("./package.json") as { version: string };
 
 const token = process.env.FIGMA_TOKEN;
 if (!token) {
@@ -24,7 +28,7 @@ const bridge = new FigmaBridge(bridgePort);
 const ctx: ToolContext = { client, bridge };
 
 const mcpServer = new McpServer(
-  { name: "figma-designer", version: "0.3.1" },
+  { name: "figma-designer", version },
   { capabilities: { tools: { listChanged: true } } },
 );
 
@@ -77,7 +81,7 @@ process.on("SIGTERM", shutdown);
 
 async function main() {
   await bridge.start();
-  console.error(`[figma-designer] MCP server starting (bridge port ${bridgePort}, dynamic tools)`);
+  console.error(`[figma-designer] v${version} starting (bridge port ${bridgePort}, dynamic tools)`);
   const transport = new StdioServerTransport();
   await mcpServer.connect(transport);
   console.error("[figma-designer] MCP server connected via stdio");
