@@ -64,6 +64,7 @@ FIGMA_TOKEN=figd_xxxxxxxxxxxx figma-designer-mcp
 |---|---|---|
 | `FIGMA_TOKEN` | 是 | Figma 个人访问令牌（[在此生成](https://www.figma.com/developers/api#access-tokens)） |
 | `FIGMA_BRIDGE_PORT` | 否 | WebSocket 桥接端口（默认：`3055`） |
+| `FIGMA_DYNAMIC_TOOLS` | 否 | 设为 `1` 启用[按需加载工具](#按需加载工具)（节省 Token） |
 
 ### Claude Desktop
 
@@ -132,7 +133,7 @@ npm run build:plugin
 2. 进入 **Plugins → Development → Import plugin from manifest…**
 3. 选择包目录下的 `figma-plugin/manifest.json`。
 4. 打开你要设计的 Figma 文件。
-5. 运行插件：**Plugins → Development → OpenClaw Figma Bridge**。
+5. 运行插件：**Plugins → Development → AI Figma Designer**。
 
 插件会打开一个配置界面，输入 MCP 服务器地址和端口，点击 **Connect** 即可。配置会通过 Figma 的 `clientStorage` 持久化保存，断线后自动重连。
 
@@ -149,7 +150,7 @@ figma-designer-mcp
   └── WebSocket 服务器（FigmaBridge，默认端口 3055）
                               ▼
                Figma 客户端（桌面或浏览器）
-                 └── "OpenClaw Figma Bridge" 插件
+                 └── "AI Figma Designer" 插件
                      └── 执行 Plugin API 调用（创建节点、设置样式、自动布局…）
 ```
 
@@ -296,6 +297,79 @@ figma-designer-mcp
 | `figma_set_properties` | 批量设置多个属性。参数：`nodeId`、`props`。 |
 | `figma_bridge_status` | 检查 Figma 插件是否已连接。 |
 
+## 按需加载工具
+
+默认情况下，所有 50+ 工具会一次性全部暴露给 LLM，仅工具定义就消耗约 4000 Token。启用 **按需加载** 后，初始只加载少量核心工具（约 9 个），LLM 通过元工具按需加载其他工具组。
+
+### 工作原理
+
+工具被划分为 8 个类别：
+
+| 类别 | 工具数 | 说明 |
+|---|---|---|
+| `core` | 7 | 读取文件、截图、查找/选择节点、列页面、桥接状态（**始终加载**） |
+| `create` | 9 | 创建画框、矩形、椭圆、线条、多边形、星形、文本、图片、页面 |
+| `modify` | 10 | 重命名、删除、复制、缩放、旋转、定位、编组/取消编组、移动层级 |
+| `style` | 7 | 填充、描边、圆角、透明度、混合模式、效果 |
+| `layout` | 5 | Auto Layout、约束、布局网格、页面边界 |
+| `text` | 3 | 文本内容、样式、颜色 |
+| `component` | 9 | 组件、实例、布尔运算、属性、组件库搜索 |
+| `export` | 6 | 导出、批量属性、REST 组件/样式、评论 |
+
+启用后会添加两个元工具：
+
+- **`figma_load_toolset`** — 加载一个或多个工具类别（如 `"create,style"` 或 `"all"`）。
+- **`figma_unload_toolset`**（MCP 模式）/ **`figma_list_toolsets`**（OpenClaw 模式）— 卸载类别或查看加载状态。
+
+LLM 通过 `figma_load_toolset` 的描述了解各类别内容，按需加载。例如被要求「创建一个登录页面」时，它会调用 `figma_load_toolset("create,style,text,layout")` 加载 24 个相关工具。
+
+### 启用方式
+
+**MCP 模式** — 设置 `FIGMA_DYNAMIC_TOOLS` 环境变量：
+
+```json
+{
+  "mcpServers": {
+    "figma": {
+      "command": "npx",
+      "args": ["figma-designer-mcp"],
+      "env": {
+        "FIGMA_TOKEN": "figd_xxxxxxxxxxxx",
+        "FIGMA_DYNAMIC_TOOLS": "1"
+      }
+    }
+  }
+}
+```
+
+**OpenClaw 模式** — 在插件配置中添加 `dynamicTools`：
+
+```jsonc
+{
+  "plugins": {
+    "entries": {
+      "figma-designer": {
+        "enabled": true,
+        "config": {
+          "personalAccessToken": "figd_xxxxxxxxxxxx",
+          "dynamicTools": true
+        }
+      }
+    }
+  }
+}
+```
+
+### Token 节省效果
+
+| 模式 | 工具 Token 消耗（约） |
+|---|---|
+| 全量加载（默认） | ~4000 tokens |
+| 按需加载 — 初始 | ~500 tokens（核心 + 元工具） |
+| 按需加载 — 典型任务 | ~1500–2500 tokens（核心 + 2–3 个类别） |
+
+典型节省：工具定义 Token 的 **60–80%**。
+
 ## 开发
 
 ### 构建
@@ -328,6 +402,7 @@ figma-designer-mcp/
 ├── LICENSE
 ├── src/
 │   ├── tool-defs.ts          # 共享工具定义（唯一数据源）
+│   ├── tool-registry.ts      # 工具分组与按需加载注册表
 │   ├── client.ts             # Figma REST API 客户端（读取操作）
 │   ├── tools.ts              # OpenClaw 适配器 — 读取工具
 │   ├── write-tools.ts        # OpenClaw 适配器 — 写入工具
@@ -350,7 +425,7 @@ figma-designer-mcp/
 
 ### "Figma plugin not connected"
 
-- 确保 Figma 插件正在运行（Plugins → Development → OpenClaw Figma Bridge）。
+- 确保 Figma 插件正在运行（Plugins → Development → AI Figma Designer）。
 - 检查插件 UI 中的 WebSocket 地址是否与服务器 IP 和端口匹配。
 - 确认防火墙没有阻止桥接端口。
 
@@ -392,7 +467,8 @@ figma-designer-mcp/
         "enabled": true,
         "config": {
           "personalAccessToken": "figd_xxxxxxxxxxxx",
-          "bridgePort": 3055          // 可选，默认 3055
+          "bridgePort": 3055,         // 可选，默认 3055
+          "dynamicTools": true         // 可选，启用按需加载工具
         }
       }
     }

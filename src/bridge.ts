@@ -78,7 +78,7 @@ export class FigmaBridge {
   async send(action: string, args: Record<string, unknown> = {}, timeoutMs = 30000): Promise<unknown> {
     if (!this.isConnected) {
       throw new Error(
-        "Figma plugin not connected. Open Figma and run the 'OpenClaw Figma Bridge' plugin, " +
+        "Figma plugin not connected. Open Figma and run the 'AI Figma Designer' plugin, " +
         `then ensure it connects to ws://<server-ip>:${this.port}`
       );
     }

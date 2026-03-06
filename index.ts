@@ -151,7 +151,7 @@ function registerDynamic(api: OpenClawPluginApi, activeBridge: FigmaBridge) {
 
 const plugin = {
   id: "figma-designer",
-  name: "Figma Designer",
+  name: "AI Figma Designer",
   logo: new URL("./figma-plugin/assets/logo.jpeg", import.meta.url).pathname,
   description:
     "Full Figma integration: read designs via REST API, create and modify designs via WebSocket bridge to Figma plugin",

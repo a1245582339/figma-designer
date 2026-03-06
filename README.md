@@ -64,6 +64,7 @@ FIGMA_TOKEN=figd_xxxxxxxxxxxx figma-designer-mcp
 |---|---|---|
 | `FIGMA_TOKEN` | Yes | Figma Personal Access Token ([generate here](https://www.figma.com/developers/api#access-tokens)) |
 | `FIGMA_BRIDGE_PORT` | No | WebSocket bridge port (default: `3055`) |
+| `FIGMA_DYNAMIC_TOOLS` | No | Set to `1` to enable [dynamic tool loading](#dynamic-tool-loading) (saves tokens) |
 
 ### Claude Desktop
 
@@ -132,7 +133,7 @@ This compiles `figma-plugin/src/plugin.ts` → `figma-plugin/plugin.js` using es
 2. Go to **Plugins → Development → Import plugin from manifest…**
 3. Select `figma-plugin/manifest.json` from the package directory.
 4. Open the Figma file you want to design in.
-5. Run the plugin: **Plugins → Development → OpenClaw Figma Bridge**.
+5. Run the plugin: **Plugins → Development → AI Figma Designer**.
 
 The plugin opens a UI where you enter the MCP server address and port, then click **Connect**. Configuration is persisted via Figma's `clientStorage`. The plugin auto-reconnects on disconnection.
 
@@ -149,7 +150,7 @@ figma-designer-mcp
   └── WebSocket server (FigmaBridge, default port 3055)
                               ▼
                Figma Client (Desktop or Browser)
-                 └── "OpenClaw Figma Bridge" plugin
+                 └── "AI Figma Designer" plugin
                      └── Executes Plugin API calls (create nodes, set styles, auto layout …)
 ```
 
@@ -296,6 +297,79 @@ This prevents overlapping. Elements placed inside a Frame (with `parentId`) are 
 | `figma_set_properties` | Batch-set multiple properties. Params: `nodeId`, `props`. |
 | `figma_bridge_status` | Check if the Figma plugin is connected. |
 
+## Dynamic Tool Loading
+
+By default, all 50+ tools are exposed to the LLM at once, which consumes ~4000 tokens just for tool definitions. When **dynamic tool loading** is enabled, only a small set of core tools (~9) is loaded initially, and the LLM loads additional tool groups on demand via a meta-tool.
+
+### How It Works
+
+Tools are organized into 8 categories:
+
+| Category | Tools | Description |
+|---|---|---|
+| `core` | 7 | Read files, screenshot, find/select nodes, list pages, bridge status (**always loaded**) |
+| `create` | 9 | Create frames, rectangles, ellipses, lines, polygons, stars, text, images, pages |
+| `modify` | 10 | Rename, delete, duplicate, resize, rotate, reposition, group/ungroup, reparent nodes |
+| `style` | 7 | Fill, stroke, corner radius, opacity, blend mode, effects |
+| `layout` | 5 | Auto layout, constraints, layout grids, page bounds |
+| `text` | 3 | Text content, style, color |
+| `component` | 9 | Components, instances, boolean ops, properties, library search |
+| `export` | 6 | Export, batch properties, REST components/styles, comments |
+
+When enabled, two meta-tools are added:
+
+- **`figma_load_toolset`** — Load one or more tool categories (e.g. `"create,style"` or `"all"`).
+- **`figma_unload_toolset`** (MCP) / **`figma_list_toolsets`** (OpenClaw) — Unload categories or list their status.
+
+The LLM sees the category descriptions in `figma_load_toolset` and loads what it needs. For example, when asked to "create a login page", it calls `figma_load_toolset("create,style,text,layout")` to load 24 relevant tools.
+
+### Enabling Dynamic Tool Loading
+
+**MCP mode** — set the `FIGMA_DYNAMIC_TOOLS` environment variable:
+
+```json
+{
+  "mcpServers": {
+    "figma": {
+      "command": "npx",
+      "args": ["figma-designer-mcp"],
+      "env": {
+        "FIGMA_TOKEN": "figd_xxxxxxxxxxxx",
+        "FIGMA_DYNAMIC_TOOLS": "1"
+      }
+    }
+  }
+}
+```
+
+**OpenClaw mode** — add `dynamicTools` to the plugin config:
+
+```jsonc
+{
+  "plugins": {
+    "entries": {
+      "figma-designer": {
+        "enabled": true,
+        "config": {
+          "personalAccessToken": "figd_xxxxxxxxxxxx",
+          "dynamicTools": true
+        }
+      }
+    }
+  }
+}
+```
+
+### Token Savings
+
+| Mode | Tool tokens (approx.) |
+|---|---|
+| All tools (default) | ~4000 tokens |
+| Dynamic — initial load | ~500 tokens (core + meta-tools) |
+| Dynamic — typical task | ~1500–2500 tokens (core + 2–3 categories) |
+
+Typical savings: **60–80%** of tool definition tokens.
+
 ## Development
 
 ### Building
@@ -328,6 +402,7 @@ figma-designer-mcp/
 ├── LICENSE
 ├── src/
 │   ├── tool-defs.ts          # Shared tool definitions (single source of truth)
+│   ├── tool-registry.ts      # Tool categories & dynamic loading registry
 │   ├── client.ts             # Figma REST API client (read operations)
 │   ├── tools.ts              # OpenClaw adapter — read tools
 │   ├── write-tools.ts        # OpenClaw adapter — write tools
@@ -350,7 +425,7 @@ figma-designer-mcp/
 
 ### "Figma plugin not connected"
 
-- Make sure the Figma plugin is running (Plugins → Development → OpenClaw Figma Bridge).
+- Make sure the Figma plugin is running (Plugins → Development → AI Figma Designer).
 - Check that the WebSocket address in the plugin UI matches the server IP and port.
 - Verify no firewall is blocking the bridge port.
 
@@ -392,7 +467,8 @@ Add to `openclaw.json`:
         "enabled": true,
         "config": {
           "personalAccessToken": "figd_xxxxxxxxxxxx",
-          "bridgePort": 3055          // optional, default 3055
+          "bridgePort": 3055,         // optional, default 3055
+          "dynamicTools": true         // optional, enable on-demand tool loading
         }
       }
     }
