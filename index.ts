@@ -160,13 +160,11 @@ const plugin = {
     properties: {
       personalAccessToken: { type: "string" as const, description: "Figma Personal Access Token" },
       bridgePort: { type: "number" as const, description: "WebSocket bridge port (default 3055)" },
-      dynamicTools: { type: "boolean" as const, description: "Enable on-demand tool loading to save tokens (default false)" },
     },
   },
   register(api: OpenClawPluginApi) {
     const cfg = getPluginConfig(api);
     const port = (typeof cfg.bridgePort === "number" ? cfg.bridgePort : 3055);
-    const dynamicMode = cfg.dynamicTools === true || process.env.FIGMA_DYNAMIC_TOOLS === "1";
 
     if (!bridge) {
       bridge = new FigmaBridge(port);
@@ -175,12 +173,7 @@ const plugin = {
       });
     }
 
-    if (dynamicMode) {
-      registerDynamic(api, bridge);
-    } else {
-      registerFigmaTools(api);
-      registerFigmaWriteTools(api, bridge);
-    }
+    registerDynamic(api, bridge);
   },
 };
 

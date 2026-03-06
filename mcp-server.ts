@@ -1,4 +1,4 @@
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   ListToolsRequestSchema,
@@ -7,7 +7,7 @@ import {
 
 import { FigmaClient } from "./src/client.js";
 import { FigmaBridge } from "./src/bridge.js";
-import { allToolDefs, type ToolContext } from "./src/tool-defs.js";
+import { type ToolContext } from "./src/tool-defs.js";
 import { ToolRegistry } from "./src/tool-registry.js";
 
 const token = process.env.FIGMA_TOKEN;
@@ -17,41 +17,32 @@ if (!token) {
   process.exit(1);
 }
 
-const dynamicMode = process.env.FIGMA_DYNAMIC_TOOLS === "1";
 const bridgePort = Number(process.env.FIGMA_BRIDGE_PORT) || 3055;
 const client = new FigmaClient({ personalAccessToken: token });
 const bridge = new FigmaBridge(bridgePort);
 
 const ctx: ToolContext = { client, bridge };
 
-const server = new Server(
+const mcpServer = new McpServer(
   { name: "figma-designer", version: "0.3.0" },
-  { capabilities: { tools: { listChanged: dynamicMode } } },
+  { capabilities: { tools: { listChanged: true } } },
 );
 
-const registry = dynamicMode
-  ? new ToolRegistry(() => {
-      server.notification({ method: "notifications/tools/list_changed" });
-    })
-  : null;
-
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  const tools = registry ? registry.getActiveTools() : allToolDefs;
-  return {
-    tools: tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: JSON.parse(JSON.stringify(t.parameters)),
-    })),
-  };
+const registry = new ToolRegistry(() => {
+  mcpServer.sendToolListChanged();
 });
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
+mcpServer.server.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: registry.getActiveTools().map((t) => ({
+    name: t.name,
+    description: t.description,
+    inputSchema: JSON.parse(JSON.stringify(t.parameters)),
+  })),
+}));
 
-  const tool = registry
-    ? registry.findTool(name)
-    : allToolDefs.find((t) => t.name === name);
+mcpServer.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+  const tool = registry.findTool(name);
 
   if (!tool) {
     return {
@@ -77,7 +68,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function shutdown() {
   console.error("[figma-designer] Shutting down…");
   await bridge.stop();
-  await server.close();
+  await mcpServer.close();
   process.exit(0);
 }
 
@@ -86,10 +77,9 @@ process.on("SIGTERM", shutdown);
 
 async function main() {
   await bridge.start();
-  const modeLabel = dynamicMode ? "dynamic tools" : "all tools";
-  console.error(`[figma-designer] MCP server starting (bridge port ${bridgePort}, ${modeLabel})`);
+  console.error(`[figma-designer] MCP server starting (bridge port ${bridgePort}, dynamic tools)`);
   const transport = new StdioServerTransport();
-  await server.connect(transport);
+  await mcpServer.connect(transport);
   console.error("[figma-designer] MCP server connected via stdio");
 }
 

@@ -55,6 +55,7 @@
   "devDependencies": {
     "@figma/plugin-typings": "^1.123.0",
     "@sinclair/typebox": "0.34.48",
+    "@types/node": "^25.3.5",
     "esbuild": "^0.27.3"
   }
 }

@@ -64,7 +64,6 @@ FIGMA_TOKEN=figd_xxxxxxxxxxxx figma-designer-mcp
 |---|---|---|
 | `FIGMA_TOKEN` | 是 | Figma 个人访问令牌（[在此生成](https://www.figma.com/developers/api#access-tokens)） |
 | `FIGMA_BRIDGE_PORT` | 否 | WebSocket 桥接端口（默认：`3055`） |
-| `FIGMA_DYNAMIC_TOOLS` | 否 | 设为 `1` 启用[按需加载工具](#按需加载工具)（节省 Token） |
 
 ### Claude Desktop
 
@@ -299,7 +298,7 @@ figma-designer-mcp
 
 ## 按需加载工具
 
-默认情况下，所有 50+ 工具会一次性全部暴露给 LLM，仅工具定义就消耗约 4000 Token。启用 **按需加载** 后，初始只加载少量核心工具（约 9 个），LLM 通过元工具按需加载其他工具组。
+服务器默认采用 **按需加载** 模式，而非一次性暴露全部 50+ 工具（约 4000 Token 的工具定义）。初始只加载少量核心工具（约 9 个）和元工具，LLM 根据任务按需加载其他工具组。
 
 ### 工作原理
 
@@ -316,49 +315,12 @@ figma-designer-mcp
 | `component` | 9 | 组件、实例、布尔运算、属性、组件库搜索 |
 | `export` | 6 | 导出、批量属性、REST 组件/样式、评论 |
 
-启用后会添加两个元工具：
+两个元工具管理加载：
 
 - **`figma_load_toolset`** — 加载一个或多个工具类别（如 `"create,style"` 或 `"all"`）。
 - **`figma_unload_toolset`**（MCP 模式）/ **`figma_list_toolsets`**（OpenClaw 模式）— 卸载类别或查看加载状态。
 
 LLM 通过 `figma_load_toolset` 的描述了解各类别内容，按需加载。例如被要求「创建一个登录页面」时，它会调用 `figma_load_toolset("create,style,text,layout")` 加载 24 个相关工具。
-
-### 启用方式
-
-**MCP 模式** — 设置 `FIGMA_DYNAMIC_TOOLS` 环境变量：
-
-```json
-{
-  "mcpServers": {
-    "figma": {
-      "command": "npx",
-      "args": ["figma-designer-mcp"],
-      "env": {
-        "FIGMA_TOKEN": "figd_xxxxxxxxxxxx",
-        "FIGMA_DYNAMIC_TOOLS": "1"
-      }
-    }
-  }
-}
-```
-
-**OpenClaw 模式** — 在插件配置中添加 `dynamicTools`：
-
-```jsonc
-{
-  "plugins": {
-    "entries": {
-      "figma-designer": {
-        "enabled": true,
-        "config": {
-          "personalAccessToken": "figd_xxxxxxxxxxxx",
-          "dynamicTools": true
-        }
-      }
-    }
-  }
-}
-```
 
 ### Token 节省效果
 
@@ -467,8 +429,7 @@ figma-designer-mcp/
         "enabled": true,
         "config": {
           "personalAccessToken": "figd_xxxxxxxxxxxx",
-          "bridgePort": 3055,         // 可选，默认 3055
-          "dynamicTools": true         // 可选，启用按需加载工具
+          "bridgePort": 3055          // 可选，默认 3055
         }
       }
     }

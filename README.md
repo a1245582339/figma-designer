@@ -64,7 +64,6 @@ FIGMA_TOKEN=figd_xxxxxxxxxxxx figma-designer-mcp
 |---|---|---|
 | `FIGMA_TOKEN` | Yes | Figma Personal Access Token ([generate here](https://www.figma.com/developers/api#access-tokens)) |
 | `FIGMA_BRIDGE_PORT` | No | WebSocket bridge port (default: `3055`) |
-| `FIGMA_DYNAMIC_TOOLS` | No | Set to `1` to enable [dynamic tool loading](#dynamic-tool-loading) (saves tokens) |
 
 ### Claude Desktop
 
@@ -299,7 +298,7 @@ This prevents overlapping. Elements placed inside a Frame (with `parentId`) are 
 
 ## Dynamic Tool Loading
 
-By default, all 50+ tools are exposed to the LLM at once, which consumes ~4000 tokens just for tool definitions. When **dynamic tool loading** is enabled, only a small set of core tools (~9) is loaded initially, and the LLM loads additional tool groups on demand via a meta-tool.
+Instead of exposing all 50+ tools at once (~4000 tokens in tool definitions), the server uses **dynamic tool loading** by default. Only a small set of core tools (~9) plus meta-tools are loaded initially. The LLM loads additional tool groups on demand as needed.
 
 ### How It Works
 
@@ -316,49 +315,12 @@ Tools are organized into 8 categories:
 | `component` | 9 | Components, instances, boolean ops, properties, library search |
 | `export` | 6 | Export, batch properties, REST components/styles, comments |
 
-When enabled, two meta-tools are added:
+Two meta-tools manage loading:
 
 - **`figma_load_toolset`** — Load one or more tool categories (e.g. `"create,style"` or `"all"`).
 - **`figma_unload_toolset`** (MCP) / **`figma_list_toolsets`** (OpenClaw) — Unload categories or list their status.
 
 The LLM sees the category descriptions in `figma_load_toolset` and loads what it needs. For example, when asked to "create a login page", it calls `figma_load_toolset("create,style,text,layout")` to load 24 relevant tools.
-
-### Enabling Dynamic Tool Loading
-
-**MCP mode** — set the `FIGMA_DYNAMIC_TOOLS` environment variable:
-
-```json
-{
-  "mcpServers": {
-    "figma": {
-      "command": "npx",
-      "args": ["figma-designer-mcp"],
-      "env": {
-        "FIGMA_TOKEN": "figd_xxxxxxxxxxxx",
-        "FIGMA_DYNAMIC_TOOLS": "1"
-      }
-    }
-  }
-}
-```
-
-**OpenClaw mode** — add `dynamicTools` to the plugin config:
-
-```jsonc
-{
-  "plugins": {
-    "entries": {
-      "figma-designer": {
-        "enabled": true,
-        "config": {
-          "personalAccessToken": "figd_xxxxxxxxxxxx",
-          "dynamicTools": true
-        }
-      }
-    }
-  }
-}
-```
 
 ### Token Savings
 
@@ -467,8 +429,7 @@ Add to `openclaw.json`:
         "enabled": true,
         "config": {
           "personalAccessToken": "figd_xxxxxxxxxxxx",
-          "bridgePort": 3055,         // optional, default 3055
-          "dynamicTools": true         // optional, enable on-demand tool loading
+          "bridgePort": 3055          // optional, default 3055
         }
       }
     }
