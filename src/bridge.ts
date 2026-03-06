@@ -38,12 +38,12 @@ export class FigmaBridge {
     return new Promise((resolve, reject) => {
       this.wss = new WebSocketServer({ port: this.port, host: "0.0.0.0" });
       this.wss.on("listening", () => {
-        console.log(`[figma-designer] WebSocket bridge listening on ws://0.0.0.0:${this.port}`);
+        console.error(`[figma-designer] WebSocket bridge listening on ws://0.0.0.0:${this.port}`);
         resolve();
       });
       this.wss.on("error", reject);
       this.wss.on("connection", (ws) => {
-        console.log("[figma-designer] Figma plugin connected");
+        console.error("[figma-designer] Figma plugin connected");
         this.plugin = ws;
         ws.on("message", (raw) => {
           try {
@@ -55,7 +55,7 @@ export class FigmaBridge {
           }
         });
         ws.on("close", () => {
-          console.log("[figma-designer] Figma plugin disconnected");
+          console.error("[figma-designer] Figma plugin disconnected");
           if (this.plugin === ws) this.plugin = null;
           for (const [id, req] of this.pending) {
             req.reject(new Error("Figma plugin disconnected"));
