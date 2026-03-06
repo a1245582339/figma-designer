@@ -12,7 +12,7 @@ import { type ToolContext } from "./src/tool-defs.js";
 import { ToolRegistry } from "./src/tool-registry.js";
 
 const require = createRequire(import.meta.url);
-const { version } = require("./package.json") as { version: string };
+const { version } = require("../package.json") as { version: string };
 
 const token = process.env.FIGMA_TOKEN;
 if (!token) {
