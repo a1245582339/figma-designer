@@ -73,6 +73,8 @@ export const toolCategories = {
     "figma_set_properties",
     "figma_components",
     "figma_styles",
+  ],
+  comment: [
     "figma_comment",
     "figma_get_comments",
   ],
@@ -88,7 +90,8 @@ const categoryDescriptions: Record<ToolCategory, string> = {
   layout: "Auto layout, constraints, layout grids, page bounds",
   text: "Set text content, text style, text color",
   component: "Create components/instances, detach, boolean ops, get/set component properties, search components",
-  export: "Export nodes, batch set properties, list components/styles via REST, comments",
+  export: "Export nodes as images, batch set properties, list components/styles via REST",
+  comment: "Post and read comments on the Figma file",
 };
 
 // ── Meta-tool definitions ──
@@ -97,15 +100,23 @@ function makeLoadToolsetDef(registry: ToolRegistry): ToolDef {
   return {
     name: "figma_load_toolset",
     description:
-      "Load a group of Figma tools on demand. Available categories:\n" +
+      "Load Figma tools by category. ONLY load what you need for the current task — " +
+      "loading unnecessary tools wastes context tokens.\n\n" +
+      "Available categories:\n" +
       Object.entries(categoryDescriptions)
         .map(([k, v]) => `• ${k}: ${v}`)
         .join("\n") +
-      '\nUse category "all" to load everything. Multiple categories can be loaded at once with a comma-separated string.',
+      "\n\nTask-based recommendations:\n" +
+      "• Drawing/creating UI: create,style,layout,text\n" +
+      "• Editing existing designs: modify,style,text\n" +
+      "• Working with components: component\n" +
+      "• Exporting assets: export\n" +
+      "• Reviewing/commenting: comment\n" +
+      '\nAvoid loading "all" unless truly needed.',
     parameters: Type.Object({
       categories: Type.String({
         description:
-          'Comma-separated category names to load (e.g. "create,style") or "all" for everything.',
+          'Comma-separated category names to load (e.g. "create,style,layout,text"). Only load what the task requires.',
       }),
     }),
     async execute(params: { categories: string }) {
