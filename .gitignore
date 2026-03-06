@@ -2,3 +2,4 @@ node_modules/
 figma-plugin/plugin.js
 dist/
 ._*
+.mcpregistry_*
