@@ -25,7 +25,7 @@ const bridge = new FigmaBridge(bridgePort);
 const ctx: ToolContext = { client, bridge };
 
 const server = new Server(
-  { name: "figma-designer", version: "0.2.2" },
+  { name: "figma-designer", version: "0.3.0" },
   { capabilities: { tools: { listChanged: dynamicMode } } },
 );
 
