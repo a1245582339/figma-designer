@@ -9,7 +9,7 @@ Works with any MCP-compatible client (Claude Desktop, Cursor, Continue, etc.) an
 
 English | [中文](./README.zh-CN.md)
 
-![figma-designer-mcp demo](https://github.com/a1245582339/picx-images-hosting/raw/master/ScreenShot_2026-03-06_092528_621.4ubhacbd2e.png)
+![figma-designer-mcp demo](https://github.com/a1245582339/picx-images-hosting/raw/master/ScreenShot_2026-03-06_092528_621.4ubhacbd2e.2dp95xm53p.png)
 
 - **Read** — powered by the Figma REST API (no plugin required).
 - **Write** — powered by a lightweight Figma plugin that connects via WebSocket and executes Plugin API operations in real time.
